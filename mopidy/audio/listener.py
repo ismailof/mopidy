@@ -94,3 +94,9 @@ class AudioListener(listener.Listener):
         :type tags: :class:`set` of strings
         """
         pass
+
+    def element_message_received(self, source, data):
+        """
+        TODO: doc
+        """
+        pass

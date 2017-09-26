@@ -41,7 +41,6 @@ class _Appsrc(object):
 
     def reset(self):
         """Reset the helper.
-
         Should be called whenever the source changes and we are not setting up
         a new appsrc.
         """
@@ -58,7 +57,6 @@ class _Appsrc(object):
 
     def configure(self, source):
         """Configure the supplied source for use.
-
         Should be called whenever we get a new appsrc.
         """
         source.set_property('caps', self._caps)
@@ -227,7 +225,9 @@ class _Handler(object):
             self.on_tag(taglist)
         elif msg.type == Gst.MessageType.ELEMENT:
             if GstPbutils.is_missing_plugin_message(msg):
-                self.on_missing_plugin(msg)
+                self.on_missing_plugin_message(msg)
+            else:
+                self.on_element_message(msg)
         elif msg.type == Gst.MessageType.STREAM_START:
             self.on_stream_start()
 
@@ -314,7 +314,6 @@ class _Handler(object):
         gst_logger.error('GStreamer error: %s', error_msg)
         # TODO: is this needed?
         self._audio.stop_playback()
-        self.on_end_of_stream()
 
     def on_warning(self, error, debug):
         error_msg = str(error).decode('utf-8')
@@ -361,6 +360,13 @@ class _Handler(object):
         # can provide a 'mopidy install-missing-plugins' if the system has the
         # required helper installed?
 
+    def on_element_message(self, msg):
+        source = msg.src.name
+        data = Gst.Message.get_structure(msg).to_string()
+        logger.debug('Audio event: element_message_received(src=%r)',
+            source)
+        AudioListener.send('element_message_received', source=source, data=data)
+            
     def on_stream_start(self):
         gst_logger.debug('Got STREAM_START bus message')
         uri = self._audio._pending_uri
@@ -422,6 +428,7 @@ class Audio(pykka.ThreadingActor):
         self._playbin = None
         self._outputs = None
         self._queue = None
+        self._filters = None
         self._about_to_finish_callback = None
 
         self._handler = _Handler(self)
@@ -437,6 +444,7 @@ class Audio(pykka.ThreadingActor):
             self._setup_preferences()
             self._setup_playbin()
             self._setup_outputs()
+            self._setup_filters()
             self._setup_audio_sink()
         except GObject.GError as ex:
             logger.exception(ex)
@@ -490,6 +498,23 @@ class Audio(pykka.ThreadingActor):
 
         self._handler.setup_event_handling(
             self._outputs.get_static_pad('sink'))
+
+    def _setup_filters(self):
+        description = self._config['audio'].get('filter')
+        if not description or description == 'none':
+            return
+
+        try:
+            filter = Gst.parse_bin_from_description(
+                description, ghost_unlinked_pads=True)
+        except GObject.GError as ex:
+            logger.error(
+                'Failed to create filter "%s": %s', description, ex)
+            raise exceptions.AudioException(bytes(ex))
+
+        self._playbin.set_property('audio-filter', filter)
+        self._filters = filter
+        logger.info('Audio filter set to "%s"', description)
 
     def _setup_audio_sink(self):
         audio_sink = Gst.ElementFactory.make('bin', 'audio-sink')
@@ -553,9 +578,7 @@ class Audio(pykka.ThreadingActor):
     def set_uri(self, uri):
         """
         Set URI of audio to be played.
-
         You *MUST* call :meth:`prepare_change` before calling this method.
-
         :param uri: the URI to play
         :type uri: string
         """
@@ -578,9 +601,7 @@ class Audio(pykka.ThreadingActor):
             self, caps, need_data=None, enough_data=None, seek_data=None):
         """
         Switch to using appsrc for getting audio to be played.
-
         You *MUST* call :meth:`prepare_change` before calling this method.
-
         :param caps: GStreamer caps string describing the audio format to
             expect
         :type caps: string
@@ -601,15 +622,11 @@ class Audio(pykka.ThreadingActor):
     def emit_data(self, buffer_):
         """
         Call this to deliver raw audio data to be played.
-
         If the buffer is :class:`None`, the end-of-stream token is put on the
         playbin. We will get a GStreamer message when the stream playback
         reaches the token, and can then do any end-of-stream related tasks.
-
         Note that the URI must be set to ``appsrc://`` for this to work.
-
         Returns :class:`True` if data was delivered.
-
         :param buffer_: buffer to pass to appsrc
         :type buffer_: :class:`Gst.Buffer` or :class:`None`
         :rtype: boolean
@@ -620,10 +637,8 @@ class Audio(pykka.ThreadingActor):
         """
         Put an end-of-stream token on the playbin. This is typically used in
         combination with :meth:`emit_data`.
-
         We will get a GStreamer message when the stream playback reaches the
         token, and can then do any end-of-stream related tasks.
-
         .. deprecated:: 1.0
             Use :meth:`emit_data` with a :class:`None` buffer instead.
         """
@@ -633,12 +648,10 @@ class Audio(pykka.ThreadingActor):
     def set_about_to_finish_callback(self, callback):
         """
         Configure audio to use an about-to-finish callback.
-
         This should be used to achieve gapless playback. For this to work the
         callback *MUST* call :meth:`set_uri` with the new URI to play and
         block until this call has been made. :meth:`prepare_change` is not
         needed before :meth:`set_uri` in this one special case.
-
         :param callable callback: Callback to run when we need the next URI.
         """
         self._about_to_finish_callback = callback
@@ -646,7 +659,6 @@ class Audio(pykka.ThreadingActor):
     def get_position(self):
         """
         Get position in milliseconds.
-
         :rtype: int
         """
         success, position = self._playbin.query_position(Gst.Format.TIME)
@@ -662,7 +674,6 @@ class Audio(pykka.ThreadingActor):
     def set_position(self, position):
         """
         Set position in milliseconds.
-
         :param position: the position in milliseconds
         :type position: int
         :rtype: :class:`True` if successful, else :class:`False`
@@ -682,7 +693,6 @@ class Audio(pykka.ThreadingActor):
     def start_playback(self):
         """
         Notify GStreamer that it should start playback.
-
         :rtype: :class:`True` if successfull, else :class:`False`
         """
         return self._set_state(Gst.State.PLAYING)
@@ -690,7 +700,6 @@ class Audio(pykka.ThreadingActor):
     def pause_playback(self):
         """
         Notify GStreamer that it should pause playback.
-
         :rtype: :class:`True` if successfull, else :class:`False`
         """
         return self._set_state(Gst.State.PAUSED)
@@ -698,7 +707,6 @@ class Audio(pykka.ThreadingActor):
     def prepare_change(self):
         """
         Notify GStreamer that we are about to change state of playback.
-
         This function *MUST* be called before changing URIs or doing
         changes like updating data that is being pushed. The reason for this
         is that GStreamer will reset all its state when it changes to
@@ -709,7 +717,6 @@ class Audio(pykka.ThreadingActor):
     def stop_playback(self):
         """
         Notify GStreamer that is should stop playback.
-
         :rtype: :class:`True` if successfull, else :class:`False`
         """
         self._buffering = False
@@ -717,14 +724,12 @@ class Audio(pykka.ThreadingActor):
 
     def wait_for_state_change(self):
         """Block until any pending state changes are complete.
-
         Should only be used by tests.
         """
         self._playbin.get_state(timeout=Gst.CLOCK_TIME_NONE)
 
     def enable_sync_handler(self):
         """Enable manual processing of messages from bus.
-
         Should only be used by tests.
         """
         def sync_handler(bus, message):
@@ -737,19 +742,15 @@ class Audio(pykka.ThreadingActor):
     def _set_state(self, state):
         """
         Internal method for setting the raw GStreamer state.
-
         .. digraph:: gst_state_transitions
-
             graph [rankdir="LR"];
             node [fontsize=10];
-
             "NULL" -> "READY"
             "PAUSED" -> "PLAYING"
             "PAUSED" -> "READY"
             "PLAYING" -> "PAUSED"
             "READY" -> "NULL"
             "READY" -> "PAUSED"
-
         :param state: State to set playbin to. One of: `Gst.State.NULL`,
             `Gst.State.READY`, `Gst.State.PAUSED` and `Gst.State.PLAYING`.
         :type state: :class:`Gst.State`
@@ -773,11 +774,9 @@ class Audio(pykka.ThreadingActor):
     def set_metadata(self, track):
         """
         Set track metadata for currently playing song.
-
         Only needs to be called by sources such as ``appsrc`` which do not
         already inject tags in playbin, e.g. when using :meth:`emit_data` to
         deliver raw audio data to GStreamer.
-
         :param track: the current track
         :type track: :class:`mopidy.models.Track`
         """
@@ -818,15 +817,14 @@ class Audio(pykka.ThreadingActor):
     def get_current_tags(self):
         """
         Get the currently playing media's tags.
-
         If no tags have been found, or nothing is playing this returns an empty
         dictionary. For each set of tags we collect a tags_changed event is
         emitted with the keys of the changes tags. After such calls users may
         call this function to get the updated values.
-
         :rtype: {key: [values]} dict for the current media.
         """
         # TODO: should this be a (deep) copy? most likely yes
         # TODO: should we return None when stopped?
         # TODO: support only fetching keys we care about?
         return self._tags
+        
