@@ -187,3 +187,9 @@ class CoreListener(listener.Listener):
         :type title: string
         """
         pass
+
+    def audio_message(self, source, data):
+        """
+        TODO: doc
+        """
+        pass

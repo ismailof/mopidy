@@ -139,7 +139,10 @@ class Core(
             title = tags['title'][0]
             self.playback._stream_title = title
             CoreListener.send('stream_title_changed', title=title)
-
+                    
+    def element_message_received(self, source, data):        
+        CoreListener.send('audio_message', source=source, data=data)
+        
     def setup(self):
         """Do not call this function. It is for internal use at startup."""
         try:
