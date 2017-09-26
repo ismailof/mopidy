@@ -225,7 +225,7 @@ class _Handler(object):
             self.on_tag(taglist)
         elif msg.type == Gst.MessageType.ELEMENT:
             if GstPbutils.is_missing_plugin_message(msg):
-                self.on_missing_plugin_message(msg)
+                self.on_missing_plugin(msg)
             else:
                 self.on_element_message(msg)
         elif msg.type == Gst.MessageType.STREAM_START:
