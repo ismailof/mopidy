@@ -21,7 +21,7 @@ from mopidy.core.tracklist import TracklistController
 from mopidy.internal import path, storage, validation, versioning
 from mopidy.internal.deprecation import deprecated_property
 from mopidy.internal.models import CoreState
-
+from mopidy.audio.utils import parse_gst_message
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +140,9 @@ class Core(
             self.playback._stream_title = title
             CoreListener.send('stream_title_changed', title=title)
                     
-    def element_message_received(self, source, data):        
-        CoreListener.send('audio_message', source=source, data=data)
+    def element_message_received(self, msg):
+        parsed_msg = parse_gst_message(msg)        
+        CoreListener.send('audio_message', message=parsed_msg)
         
     def setup(self):
         """Do not call this function. It is for internal use at startup."""

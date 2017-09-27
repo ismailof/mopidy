@@ -71,7 +71,29 @@ def setup_proxy(element, config):
     element.set_property('proxy-id', config.get('username'))
     element.set_property('proxy-pw', config.get('password'))
 
+def parse_gst_message(msg):
+    src = msg.src.name        
+    name, data = parse_gst_structure(Gst.Message.get_structure(msg))
+    parsed_msg = {'src': src, 
+                  'name': name,
+                  'data': data}
+    return parsed_msg
 
+def parse_gst_structure(structure): 
+    # Name of the GstStructure
+    struct_name = structure.get_name()
+    
+    # Parse GstStructure fields to data dictionary
+    struct_data = {}
+    for id in xrange(structure.n_fields()):
+        field = structure.nth_field_name(id)
+        value = structure.get_value(field)
+        # WILL NOT WORK FOR gstreamer-1.0 VERSION < 1.12!
+        if isinstance(value, (Gst.ValueList, Gst.ValueArray)):
+            value = value.array
+        struct_data[field] = value    
+    return struct_name, struct_data
+    
 class Signals(object):
 
     """Helper for tracking gobject signal registrations"""

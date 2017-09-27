@@ -28,7 +28,7 @@ else:
 GLib.set_prgname('mopidy')
 GLib.set_application_name('Mopidy')
 
-REQUIRED_GST_VERSION = (1, 2, 3)
+REQUIRED_GST_VERSION = (1, 4, 0)
 
 if Gst.version() < REQUIRED_GST_VERSION:
     sys.exit(

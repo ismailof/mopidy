@@ -95,7 +95,7 @@ class AudioListener(listener.Listener):
         """
         pass
 
-    def element_message_received(self, source, data):
+    def element_message_received(self, msg):
         """
         TODO: doc
         """

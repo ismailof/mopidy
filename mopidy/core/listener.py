@@ -188,7 +188,7 @@ class CoreListener(listener.Listener):
         """
         pass
 
-    def audio_message(self, source, data):
+    def audio_message(self, message):
         """
         TODO: doc
         """

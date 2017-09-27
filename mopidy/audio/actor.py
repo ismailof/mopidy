@@ -361,11 +361,9 @@ class _Handler(object):
         # required helper installed?
 
     def on_element_message(self, msg):
-        source = msg.src.name
-        data = Gst.Message.get_structure(msg).to_string()
         logger.debug('Audio event: element_message_received(src=%r)',
-            source)
-        AudioListener.send('element_message_received', source=source, data=data)
+            msg.src.name)
+        AudioListener.send('element_message_received', msg=msg)
             
     def on_stream_start(self):
         gst_logger.debug('Got STREAM_START bus message')
